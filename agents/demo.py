@@ -8,8 +8,8 @@ from agents.workers.knowledge_base_builder_agent import KnowledgeBaseBuilderAgen
 def main():
     # Create an instance of the KnowledgeBaseBuilderAgent
     agent = KnowledgeBaseBuilderAgent(
-        agent_id="kb_builder_001",
-        supervisor_id="supervisor_001"
+        agent_id="KnowledgeBaseBuilderAgent",
+        supervisor_id="SupervisorAgent_Main"
     )
     
     print("=" * 60)
