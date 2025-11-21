@@ -80,12 +80,40 @@ def main():
         return
     print()
     
-    # Step 2: Send task assignment (overwrite mode)
-    print("Step 2: Sending task assignment (overwrite mode)...")
-    result1 = send_task_to_agent(
-        "# Team Wiki\n\n## Project Overview\nThis is the main project documentation.",
-        "overwrite"
-    )
+    # Step 2: Send task assignment (overwrite mode) - Initial wiki setup
+    print("Step 2: Sending task assignment (overwrite mode) - Initial Wiki Setup")
+    initial_wiki = """# Team Knowledge Base
+
+## Project Overview
+**Project Name:** Multi-Agent System for Workplace Productivity
+**Status:** Active Development
+**Team:** Software Engineering Team Alpha
+
+### Project Goals
+- Develop a distributed multi-agent system
+- Implement supervisor-worker architecture
+- Enable seamless agent communication via HTTP API
+- Build knowledge base for team collaboration
+
+### Key Features
+- Real-time task assignment and processing
+- Persistent long-term memory (LTM)
+- Health monitoring and error reporting
+- Protocol-compliant JSON message exchange
+
+## Team Members
+- **Project Lead:** Sarah Johnson
+- **Backend Developer:** Michael Chen
+- **Frontend Developer:** Emily Rodriguez
+- **DevOps Engineer:** David Kim
+
+## Technology Stack
+- **Language:** Python 3.8+
+- **Framework:** Flask (HTTP API)
+- **Storage:** JSON-based LTM
+- **Communication:** RESTful API with JSON protocol"""
+    
+    result1 = send_task_to_agent(initial_wiki, "overwrite")
     if result1:
         print(f"✓ Task completed: {result1.get('status', 'unknown')}")
         if result1.get('status') == 'SUCCESS':
@@ -96,12 +124,34 @@ def main():
         print("✗ Task failed")
     print()
     
-    # Step 3: Send task assignment (append mode)
-    print("Step 3: Sending task assignment (append mode)...")
-    result2 = send_task_to_agent(
-        "\n## Daily Updates\n- Completed feature X\n- Fixed bug Y",
-        "append"
-    )
+    # Step 3: Send task assignment (append mode) - Daily standup updates
+    print("Step 3: Sending task assignment (append mode) - Daily Standup Updates")
+    daily_updates = """
+## Daily Standup - November 21, 2025
+
+### Completed Today
+- ✅ Implemented persistent LTM storage with file-based persistence
+- ✅ Added request-response caching for improved performance
+- ✅ Integrated LTM search before processing (project requirement)
+- ✅ Created comprehensive test suite for supervisor-agent communication
+- ✅ Deployed agent as HTTP API server on port 5000
+
+### In Progress
+- 🔄 Finalizing integration with supervisor registry
+- 🔄 Writing project documentation and API contracts
+- 🔄 Preparing presentation materials
+
+### Blockers
+- ⚠️ Waiting for supervisor registry endpoint details
+- ⚠️ Need clarification on health check response format
+
+### Notes
+- Agent successfully handles overwrite and append modes
+- LTM persistence working correctly across restarts
+- Cache retrieval improving response time by ~80%
+- All protocol validation tests passing"""
+    
+    result2 = send_task_to_agent(daily_updates, "append")
     if result2:
         print(f"✓ Task completed: {result2.get('status', 'unknown')}")
         if result2.get('status') == 'SUCCESS':
@@ -112,8 +162,59 @@ def main():
         print("✗ Task failed")
     print()
     
-    # Step 4: Test error handling (missing parameter)
-    print("Step 4: Testing error handling (unsupported task)...")
+    # Step 3.5: Send another append - Meeting notes
+    print("Step 3.5: Sending task assignment (append mode) - Meeting Notes")
+    meeting_notes = """
+## Team Meeting Notes - November 20, 2025
+
+### Agenda
+1. Project status review
+2. Integration planning
+3. Next sprint planning
+
+### Decisions Made
+- **LTM Implementation:** Agreed on file-based JSON storage for simplicity
+- **API Contract:** Standardized on JSON message format with required fields
+- **Deployment:** Each agent will run as independent HTTP API server
+- **Testing:** Comprehensive integration tests required before Phase-3
+
+### Action Items
+- [ ] Complete LTM persistence implementation (DONE)
+- [ ] Update supervisor registry with agent endpoints
+- [ ] Conduct end-to-end integration testing
+- [ ] Prepare final project presentation
+
+### Next Steps
+- Schedule integration testing session
+- Update project documentation
+- Prepare demo for final presentation"""
+    
+    result3 = send_task_to_agent(meeting_notes, "append")
+    if result3:
+        print(f"✓ Task completed: {result3.get('status', 'unknown')}")
+        if result3.get('status') == 'SUCCESS':
+            results = result3.get('results', {})
+            print(f"  Wiki size: {results.get('wiki_size', 'N/A')} characters")
+            print(f"  Update mode: {results.get('update_mode', 'N/A')}")
+    else:
+        print("✗ Task failed")
+    print()
+    
+    # Step 4: Test cache retrieval (same request as Step 2)
+    print("Step 4: Testing LTM cache retrieval (same request as Step 2)...")
+    result4 = send_task_to_agent(initial_wiki, "overwrite")
+    if result4:
+        print(f"✓ Task completed: {result4.get('status', 'unknown')}")
+        if result4.get('status') == 'SUCCESS':
+            results = result4.get('results', {})
+            print(f"  Wiki size: {results.get('wiki_size', 'N/A')} characters")
+            print(f"  Note: This should be retrieved from LTM cache (check logs)")
+    else:
+        print("✗ Task failed")
+    print()
+    
+    # Step 5: Test error handling (unsupported task)
+    print("Step 5: Testing error handling (unsupported task)...")
     error_message = {
         "message_id": str(uuid.uuid4()),
         "sender": "SupervisorAgent_Main",

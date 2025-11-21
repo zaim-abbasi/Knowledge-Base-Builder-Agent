@@ -228,6 +228,31 @@ All errors include `error_code` and descriptive `message`. See Error Codes table
 
 ---
 
+## **Long-Term Memory (LTM)**
+
+The agent implements persistent LTM as required by the project:
+
+### **LTM Features**
+- **Persistent Storage**: Wiki content and request-response cache stored in `/LTM` folder
+- **LTM Search First**: On every request, agent searches LTM cache before executing
+- **Request-Response Caching**: Successful responses are cached for improved speed
+- **Auto-Load on Startup**: LTM data is automatically loaded when agent starts
+- **Auto-Save**: Changes are persisted to disk immediately
+
+### **LTM Storage**
+- **Wiki Content**: `LTM/wiki.json` - Stores the team wiki content
+- **Request Cache**: `LTM/cache.json` - Stores request-response pairs for caching
+
+### **How It Works**
+1. **Request arrives** → Agent generates hash of request parameters
+2. **Search LTM** → Checks cache for matching request hash
+3. **If found** → Returns cached response (improved speed)
+4. **If not found** → Executes agent flow, processes task
+5. **On success** → Stores request-response pair in LTM cache
+6. **Persist** → Saves to disk files automatically
+
+---
+
 ## **Configuration**
 
 ### **Logging**
