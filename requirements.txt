@@ -11,8 +11,7 @@
 #   pip install -e ".[future]"
 
 # Core dependencies
-# Currently using only Python standard library modules:
-# - json, uuid, datetime, abc, typing
+flask>=2.3.0  # HTTP API server
 
 # Development dependencies (install with: pip install -e ".[dev]")
 # pytest>=7.0.0

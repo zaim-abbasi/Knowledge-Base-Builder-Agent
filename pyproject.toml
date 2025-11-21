@@ -52,7 +52,7 @@ Repository = "https://github.com/yourusername/knowledge-base-builder-agent"
 Issues = "https://github.com/yourusername/knowledge-base-builder-agent/issues"
 
 [tool.setuptools]
-packages = ["agents", "communication", "shared", "tests"]
+packages = ["agents", "shared", "tests"]
 
 [tool.setuptools.package-data]
 "*" = ["*.yaml", "*.json", "*.md"]

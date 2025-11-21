@@ -1,14 +1,10 @@
-"""
-Test script for message handling functionality in KnowledgeBaseBuilderAgent.
-Tests the JSON handshake protocol compliance.
-"""
+"""Test script for message handling functionality in KnowledgeBaseBuilderAgent."""
 
 from agents.workers.knowledge_base_builder_agent import KnowledgeBaseBuilderAgent
 import json
 
 
 def main():
-    # Create an instance of the KnowledgeBaseBuilderAgent
     agent = KnowledgeBaseBuilderAgent(
         agent_id="KnowledgeBaseBuilderAgent",
         supervisor_id="SupervisorAgent_Main"
@@ -20,7 +16,6 @@ def main():
     print("=" * 70)
     print()
     
-    # Test 1: Valid Task Assignment Message
     print("Test 1: Valid Task Assignment Message")
     print("-" * 70)
     task_assignment_message = {
@@ -43,7 +38,6 @@ def main():
     agent.handle_incoming_message(json.dumps(task_assignment_message))
     print()
     
-    # Test 2: Health Check Message
     print("Test 2: Health Check Message")
     print("-" * 70)
     health_check_message = {
@@ -59,7 +53,6 @@ def main():
     agent.handle_incoming_message(json.dumps(health_check_message))
     print()
     
-    # Test 3: Task Assignment with Append Mode
     print("Test 3: Task Assignment with Append Mode")
     print("-" * 70)
     task_assignment_append = {
@@ -82,7 +75,6 @@ def main():
     agent.handle_incoming_message(json.dumps(task_assignment_append))
     print()
     
-    # Test 4: Invalid JSON
     print("Test 4: Invalid JSON Handling")
     print("-" * 70)
     invalid_json = '{"type": "task_assignment", "task": {invalid json}'
@@ -91,7 +83,6 @@ def main():
     agent.handle_incoming_message(invalid_json)
     print()
     
-    # Test 5: Missing Type Field
     print("Test 5: Missing Type Field")
     print("-" * 70)
     missing_type_message = {
@@ -106,7 +97,6 @@ def main():
     agent.handle_incoming_message(json.dumps(missing_type_message))
     print()
     
-    # Test 6: Unknown Message Type
     print("Test 6: Unknown Message Type")
     print("-" * 70)
     unknown_type_message = {
@@ -122,7 +112,6 @@ def main():
     agent.handle_incoming_message(json.dumps(unknown_type_message))
     print()
     
-    # Test 7: Task Assignment with Missing Task Field
     print("Test 7: Task Assignment with Missing Task Field")
     print("-" * 70)
     missing_task_message = {
@@ -138,7 +127,6 @@ def main():
     agent.handle_incoming_message(json.dumps(missing_task_message))
     print()
     
-    # Test 8: Task Assignment with Missing Task Name
     print("Test 8: Task Assignment with Missing Task Name")
     print("-" * 70)
     missing_task_name_message = {
@@ -159,7 +147,6 @@ def main():
     agent.handle_incoming_message(json.dumps(missing_task_name_message))
     print()
     
-    # Test 9: Unsupported Task Name
     print("Test 9: Unsupported Task Name")
     print("-" * 70)
     unsupported_task_message = {

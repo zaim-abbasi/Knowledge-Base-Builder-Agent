@@ -1,26 +1,39 @@
-"""
-Shared utility functions for the multi-agent system.
+"""Shared utility functions for the multi-agent system."""
 
-This module will contain:
-- Logging utilities
-- Timestamp formatting functions
-- Common helper functions
-- Configuration loading utilities
-- Error handling utilities
+import logging
+import sys
+from datetime import datetime, timezone
 
-Future implementation will provide reusable utilities across all agents.
-"""
 
-# TODO: Implement logging utilities
-# import logging
-# def setup_logger(name: str) -> logging.Logger:
-#     ...
+def setup_logger(name: str, level: int = logging.INFO) -> logging.Logger:
+    """Setup and configure a logger for the given module.
+    
+    Args:
+        name: Logger name (typically __name__)
+        level: Logging level (default: INFO)
+        
+    Returns:
+        Configured logger instance
+    """
+    logger = logging.getLogger(name)
+    
+    if logger.handlers:
+        return logger
+    
+    logger.setLevel(level)
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(level)
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    
+    return logger
 
-# TODO: Implement timestamp utilities
-# from datetime import datetime, timezone
-# def get_utc_timestamp() -> str:
-#     ...
 
-# TODO: Implement other shared utilities
-# ...
+def get_utc_timestamp() -> str:
+    """Get current UTC time in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
