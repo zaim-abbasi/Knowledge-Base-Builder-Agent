@@ -1,0 +1,14 @@
+{
+  "agent_id": "kb_builder_001",
+  "supervisor_id": "supervisor_001",
+  "description": "Knowledge Base Builder Agent Configuration",
+  "capabilities": [
+    "wiki_update",
+    "knowledge_base_maintenance"
+  ],
+  "settings": {
+    "default_update_mode": "overwrite",
+    "max_wiki_size": 1000000
+  }
+}
+

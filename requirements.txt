@@ -1,0 +1,27 @@
+# Python dependencies for Knowledge Base Builder Agent
+# Multi-agent system requirements
+#
+# Installation:
+#   pip install -r requirements.txt
+#
+# For development dependencies:
+#   pip install -e ".[dev]"
+#
+# For future dependencies:
+#   pip install -e ".[future]"
+
+# Core dependencies
+# Currently using only Python standard library modules:
+# - json, uuid, datetime, abc, typing
+
+# Development dependencies (install with: pip install -e ".[dev]")
+# pytest>=7.0.0
+# pytest-cov>=4.0.0
+# black>=23.0.0
+# flake8>=6.0.0
+# mypy>=1.0.0
+
+# Future dependencies (install with: pip install -e ".[future]")
+# pydantic>=2.0.0  # For data validation and models
+# pyyaml>=6.0      # For YAML configuration file parsing
+
