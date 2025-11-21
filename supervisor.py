@@ -1,16 +1,15 @@
-"""Example supervisor script showing how to communicate with KnowledgeBaseBuilderAgent via HTTP."""
+"""Example supervisor script for KnowledgeBaseBuilderAgent communication."""
 
 import requests
 import json
 import uuid
 from datetime import datetime, timezone
 
-# Agent API URL
 AGENT_URL = "http://localhost:5000"
 
 
 def send_task_to_agent(wiki_content: str, update_mode: str = "overwrite"):
-    """Send a task assignment to the Knowledge Base Builder Agent.
+    """Send a task assignment to the agent.
     
     Args:
         wiki_content: The wiki content to update
@@ -49,11 +48,7 @@ def send_task_to_agent(wiki_content: str, update_mode: str = "overwrite"):
 
 
 def check_agent_health():
-    """Check if the agent is healthy.
-    
-    Returns:
-        Health check response as a dictionary
-    """
+    """Check if the agent is healthy. Returns health check response."""
     try:
         response = requests.get(f"{AGENT_URL}/health", timeout=5)
         response.raise_for_status()
@@ -70,7 +65,6 @@ def main():
     print("=" * 60)
     print()
     
-    # Step 1: Health check
     print("Step 1: Checking agent health...")
     health = check_agent_health()
     if health:
@@ -80,7 +74,6 @@ def main():
         return
     print()
     
-    # Step 2: Send task assignment (overwrite mode) - Initial wiki setup
     print("Step 2: Sending task assignment (overwrite mode) - Initial Wiki Setup")
     initial_wiki = """# Team Knowledge Base
 
@@ -124,7 +117,6 @@ def main():
         print("✗ Task failed")
     print()
     
-    # Step 3: Send task assignment (append mode) - Daily standup updates
     print("Step 3: Sending task assignment (append mode) - Daily Standup Updates")
     daily_updates = """
 ## Daily Standup - November 21, 2025
@@ -162,7 +154,6 @@ def main():
         print("✗ Task failed")
     print()
     
-    # Step 3.5: Send another append - Meeting notes
     print("Step 3.5: Sending task assignment (append mode) - Meeting Notes")
     meeting_notes = """
 ## Team Meeting Notes - November 20, 2025
@@ -200,7 +191,6 @@ def main():
         print("✗ Task failed")
     print()
     
-    # Step 4: Test cache retrieval (same request as Step 2)
     print("Step 4: Testing LTM cache retrieval (same request as Step 2)...")
     result4 = send_task_to_agent(initial_wiki, "overwrite")
     if result4:
@@ -213,7 +203,6 @@ def main():
         print("✗ Task failed")
     print()
     
-    # Step 5: Test error handling (unsupported task)
     print("Step 5: Testing error handling (unsupported task)...")
     error_message = {
         "message_id": str(uuid.uuid4()),

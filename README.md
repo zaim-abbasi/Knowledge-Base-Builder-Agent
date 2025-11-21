@@ -1,7 +1,3 @@
-Here’s a concise version of your README, focusing on essentials and API details for the supervisor:
-
----
-
 # Knowledge Base Builder Agent
 
 A Python agent for handling team wiki updates in a multi-agent system.
@@ -78,12 +74,14 @@ curl -X POST http://localhost:5000/message \
     "name": "update_wiki",
     "parameters": {
       "wiki_update_content": "# Team Wiki\n\n## Daily Update\nToday we...",
-      "update_mode": "overwrite"  // or "append"
+      "update_mode": "overwrite"
     }
   },
   "timestamp": "2025-11-21T10:00:00Z"
 }
 ```
+
+**Note:** `update_mode` can be `"overwrite"` (default) or `"append"`.
 
 **Response (Success):**
 ```json
