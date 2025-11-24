@@ -1,3 +1,4 @@
 # Core dependencies
 flask>=2.3.0  # HTTP API server
 requests>=2.31.0  # For testing and supervisor communication
+gunicorn>=21.2.0  # Production WSGI server (for Ubuntu deployment)
