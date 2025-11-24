@@ -301,72 +301,134 @@ class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
         print(f"[Message from {message_dict.get('sender', self.agent_id)} to {recipient}]")
         print(message_json)
     
-    def _create_completion_report(self, related_message_id: str, task_results: dict) -> dict:
-        """Create a completion report message after processing a task.
+    def _create_supervisor_success_response(self, request_id: str, task_results: dict) -> dict:
+        """Create a Supervisor format success response.
+        
+        Supervisor success format:
+        {
+          "request_id": "...",
+          "agent_name": "...",
+          "status": "success",
+          "output": {
+            "result": "...",
+            "confidence": 0.95,
+            "details": {...}
+          },
+          "error": null
+        }
         
         Args:
-            related_message_id: The message_id of the original task assignment
+            request_id: The request_id from the original request
             task_results: The dictionary returned from process_task
             
         Returns:
-            Dictionary containing the completion report message
-        """
-        task_status = task_results.get("status", "error")
-        report_status = "SUCCESS" if task_status == "success" else "FAILURE"
-        
-        return {
-            "message_id": self._generate_message_id(),
-            "sender": self.agent_id,
-            "recipient": self.supervisor_id,
-            "type": "completion_report",
-            "related_message_id": related_message_id,
-            "status": report_status,
-            "results": task_results,
-            "timestamp": self._get_current_timestamp()
-        }
-    
-    def _create_health_check_response(self) -> dict:
-        """Create a health check response message.
-        
-        Returns:
-            Dictionary containing the health check response message
+            Dictionary containing the Supervisor format success response
         """
         return {
-            "message_id": self._generate_message_id(),
-            "sender": self.agent_id,
-            "recipient": self.supervisor_id,
-            "type": "health_check_response",
-            "status": "I'm up and ready",
-            "timestamp": self._get_current_timestamp()
+            "request_id": request_id,
+            "agent_name": self.agent_id,
+            "status": "success",
+            "output": {
+                "result": task_results.get("message", "Task completed successfully"),
+                "confidence": 0.95,
+                "details": task_results
+            },
+            "error": None
         }
     
-    def _create_error_report(self, related_message_id: str, error_code: str, error_message: str) -> dict:
-        """Create an error report message for invalid or malformed incoming messages.
+    def _create_supervisor_error_response(self, request_id: Optional[str], error_code: str, error_message: str) -> dict:
+        """Create a Supervisor format error response.
+        
+        Supervisor error format:
+        {
+          "status": "error",
+          "output": null,
+          "error": {
+            "type": "...",
+            "message": "..."
+          }
+        }
         
         Args:
-            related_message_id: The message_id of the incoming message that caused the error
-            error_code: Error code identifier (e.g., "INVALID_JSON", "MISSING_FIELD")
+            request_id: The request_id from the original request (optional for errors)
+            error_code: Error code identifier
             error_message: Human-readable error message
             
         Returns:
-            Dictionary containing the error report message
+            Dictionary containing the Supervisor format error response
         """
-        return {
-            "message_id": self._generate_message_id(),
-            "sender": self.agent_id,
-            "recipient": self.supervisor_id,
-            "type": "error_report",
-            "related_message_id": related_message_id,
-            "status": "FAILURE",
-            "results": {
-                "error_code": error_code,
+        response = {
+            "status": "error",
+            "output": None,
+            "error": {
+                "type": error_code,
                 "message": error_message
-            },
-            "timestamp": self._get_current_timestamp()
+            }
         }
+        # Include request_id if provided (for correlation)
+        if request_id:
+            response["request_id"] = request_id
+            response["agent_name"] = self.agent_id
+        return response
     
-    def _validate_incoming_message(self, message_dict: dict) -> Tuple[bool, Optional[str], Optional[str]]:
-        """Validate an incoming message against the JSON handshake protocol.
+    def _create_supervisor_health_response(self, request_id: Optional[str] = None) -> dict:
+        """Create a Supervisor format health check response.
+        
+        Args:
+            request_id: Optional request_id from health check request
+            
+        Returns:
+            Dictionary containing the Supervisor format health response
+        """
+        response = {
+            "request_id": request_id or "health-check",
+            "agent_name": self.agent_id,
+            "status": "success",
+            "output": {
+                "result": "I'm up and ready",
+                "confidence": 1.0,
+                "details": {
+                    "type": "health_check",
+                    "timestamp": self._get_current_timestamp()
+                }
+            },
+            "error": None
+        }
+        return response
+    
+    
+    def _is_supervisor_format(self, message_dict: dict) -> bool:
+        """Check if message is in Supervisor format.
+        
+        Supervisor format has: request_id, agent_name, intent, input, context
+        Legacy format has: message_id, sender, recipient, type, task
+        
+        Args:
+            message_dict: Dictionary containing the message
+            
+        Returns:
+            True if message is in Supervisor format, False otherwise
+        """
+        return "request_id" in message_dict and "agent_name" in message_dict and "intent" in message_dict
+    
+    def _validate_supervisor_message(self, message_dict: dict) -> Tuple[bool, Optional[str], Optional[str]]:
+        """Validate an incoming Supervisor format message.
+        
+        Supervisor format:
+        {
+          "request_id": "...",
+          "agent_name": "...",
+          "intent": "...",
+          "input": {
+            "text": "...",
+            "metadata": {...}
+          },
+          "context": {
+            "user_id": "...",
+            "conversation_id": "...",
+            "timestamp": "..."
+          }
+        }
         
         Args:
             message_dict: Dictionary containing the parsed message
@@ -374,110 +436,145 @@ class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
         Returns:
             Tuple of (is_valid, error_code, error_message). If valid, returns (True, None, None)
         """
-        required_fields = ["message_id", "sender", "recipient", "type", "timestamp"]
+        # Required top-level fields
+        required_fields = ["request_id", "agent_name", "intent", "input", "context"]
         for field in required_fields:
             if field not in message_dict:
                 return (False, "MISSING_FIELD", f"Missing required field: '{field}'")
         
-        if not isinstance(message_dict.get("message_id"), str):
-            return (False, "INVALID_TYPE", "Field 'message_id' must be a string")
-        if not isinstance(message_dict.get("sender"), str):
-            return (False, "INVALID_TYPE", "Field 'sender' must be a string")
-        if not isinstance(message_dict.get("recipient"), str):
-            return (False, "INVALID_TYPE", "Field 'recipient' must be a string")
-        if not isinstance(message_dict.get("type"), str):
-            return (False, "INVALID_TYPE", "Field 'type' must be a string")
-        if not isinstance(message_dict.get("timestamp"), str):
-            return (False, "INVALID_TYPE", "Field 'timestamp' must be a string")
+        # Validate types
+        if not isinstance(message_dict.get("request_id"), str):
+            return (False, "INVALID_TYPE", "Field 'request_id' must be a string")
+        if not isinstance(message_dict.get("agent_name"), str):
+            return (False, "INVALID_TYPE", "Field 'agent_name' must be a string")
+        if not isinstance(message_dict.get("intent"), str):
+            return (False, "INVALID_TYPE", "Field 'intent' must be a string")
         
-        message_type = message_dict.get("type")
-        if message_type not in ["task_assignment", "health_check"]:
-            return (False, "INVALID_MESSAGE_TYPE", 
-                   f"Invalid message type: '{message_type}'. Must be 'task_assignment' or 'health_check'")
+        # Validate input structure
+        input_data = message_dict.get("input")
+        if not isinstance(input_data, dict):
+            return (False, "INVALID_TYPE", "Field 'input' must be a dictionary")
+        if "text" not in input_data:
+            return (False, "MISSING_FIELD", "Missing required field: 'input.text'")
+        if not isinstance(input_data.get("text"), str):
+            return (False, "INVALID_TYPE", "Field 'input.text' must be a string")
+        if "metadata" in input_data and not isinstance(input_data.get("metadata"), dict):
+            return (False, "INVALID_TYPE", "Field 'input.metadata' must be a dictionary")
         
-        if message_type == "task_assignment":
-            if "task" not in message_dict:
-                return (False, "MISSING_FIELD", "Missing required field: 'task' in task_assignment message")
-            
-            task = message_dict.get("task")
-            if not isinstance(task, dict):
-                return (False, "INVALID_TYPE", "Field 'task' must be a dictionary")
-            
-            if "name" not in task:
-                return (False, "MISSING_FIELD", "Missing required field: 'task.name'")
-            if not isinstance(task.get("name"), str):
-                return (False, "INVALID_TYPE", "Field 'task.name' must be a string")
-            
-            if "parameters" not in task:
-                return (False, "MISSING_FIELD", "Missing required field: 'task.parameters'")
-            if not isinstance(task.get("parameters"), dict):
-                return (False, "INVALID_TYPE", "Field 'task.parameters' must be a dictionary")
+        # Validate context structure
+        context = message_dict.get("context")
+        if not isinstance(context, dict):
+            return (False, "INVALID_TYPE", "Field 'context' must be a dictionary")
+        if "user_id" not in context:
+            return (False, "MISSING_FIELD", "Missing required field: 'context.user_id'")
+        if not isinstance(context.get("user_id"), str):
+            return (False, "INVALID_TYPE", "Field 'context.user_id' must be a string")
+        
+        # Validate agent_name matches this agent
+        if message_dict.get("agent_name") != self.agent_id:
+            return (False, "INVALID_AGENT", 
+                   f"Agent name '{message_dict.get('agent_name')}' does not match this agent '{self.agent_id}'")
         
         return (True, None, None)
     
     def handle_incoming_message(self, json_message: str):
-        """Handle incoming JSON messages from supervisor or other agents.
+        """Handle incoming JSON messages from supervisor in Supervisor format.
         
-        Validates protocol, processes task_assignment/health_check messages, and sends
-        completion_report/health_check_response/error_report messages.
+        Supervisor format:
+        - Request: { request_id, agent_name, intent, input { text, metadata }, context { user_id, ... } }
+        - Response: { request_id, agent_name, status: success, output { result, confidence, details }, error: null }
+          or { status: error, output: null, error { type, message } }
         
         Args:
-            json_message: JSON string containing the incoming message
+            json_message: JSON string containing the incoming Supervisor format message
         """
-        original_message_id = ""
+        request_id = ""
         
         try:
             message_dict = json.loads(json_message)
-            original_message_id = message_dict.get("message_id", "")
-            message_type = message_dict.get("type", "unknown")
-            sender = message_dict.get("sender", "unknown")
-            self.logger.info(f"Received {message_type} message from {sender} (ID: {original_message_id})")
+            
+            # Check if it's Supervisor format
+            if not self._is_supervisor_format(message_dict):
+                self.logger.error("Message is not in Supervisor format")
+                error_response = self._create_supervisor_error_response(
+                    request_id=None,
+                    error_code="INVALID_FORMAT",
+                    error_message="Message must be in Supervisor format: { request_id, agent_name, intent, input, context }"
+                )
+                self._send_json_message(error_response)
+                return
+            
+            request_id = message_dict.get("request_id", "")
+            intent = message_dict.get("intent", "")
+            agent_name = message_dict.get("agent_name", "")
+            self.logger.info(f"Received Supervisor format message: intent={intent}, agent={agent_name}, request_id={request_id[:8]}...")
+            
         except json.JSONDecodeError as e:
             self.logger.error(f"Invalid JSON format: {str(e)}")
-            error_report = self._create_error_report(
-                related_message_id="",
+            error_response = self._create_supervisor_error_response(
+                request_id=None,
                 error_code="INVALID_JSON",
                 error_message=f"Invalid JSON format: {str(e)}"
             )
-            self._send_json_message(error_report)
+            self._send_json_message(error_response)
             return
         
-        is_valid, error_code, error_message = self._validate_incoming_message(message_dict)
+        # Validate Supervisor format
+        is_valid, error_code, error_message = self._validate_supervisor_message(message_dict)
         if not is_valid:
             self.logger.warning(f"Message validation failed: {error_code} - {error_message}")
-            error_report = self._create_error_report(
-                related_message_id=original_message_id,
+            error_response = self._create_supervisor_error_response(
+                request_id=request_id,
                 error_code=error_code or "VALIDATION_ERROR",
                 error_message=error_message or "Message validation failed"
             )
-            self._send_json_message(error_report)
+            self._send_json_message(error_response)
             return
         
-        message_type = message_dict.get("type")
-        original_message_id = message_dict.get("message_id")
+        # Extract Supervisor format fields
+        intent = message_dict.get("intent")
+        input_data = message_dict.get("input", {})
+        text = input_data.get("text", "")
+        metadata = input_data.get("metadata", {})
         
-        if message_type == "task_assignment":
-            task = message_dict.get("task")
-            task_name = task.get("name")
-            task_parameters = task.get("parameters", {})
+        # Handle different intents
+        if intent == "update_wiki" or intent == "health_check":
+            if intent == "update_wiki":
+                # Build task parameters from Supervisor format
+                task_parameters = {
+                    "wiki_update_content": text,
+                    "update_mode": metadata.get("update_mode", "overwrite")
+                }
+                
+                # Process the task
+                self.logger.info(f"Processing task: {intent}")
+                task_results = self.process_task(task_parameters)
+                
+                # Create Supervisor format response
+                if task_results.get("status") == "success":
+                    success_response = self._create_supervisor_success_response(request_id, task_results)
+                    self._send_json_message(success_response)
+                else:
+                    error_response = self._create_supervisor_error_response(
+                        request_id=request_id,
+                        error_code=task_results.get("error_code", "PROCESSING_ERROR"),
+                        error_message=task_results.get("message", "Task processing failed")
+                    )
+                    self._send_json_message(error_response)
             
-            if task_name != "update_wiki":
-                self.logger.warning(f"Unsupported task name: {task_name}")
-                error_report = self._create_error_report(
-                    related_message_id=original_message_id,
-                    error_code="UNSUPPORTED_TASK",
-                    error_message=f"Unsupported task name: '{task_name}'. This agent only supports 'update_wiki'"
-                )
-                self._send_json_message(error_report)
-                return
-            
-            self.logger.info(f"Processing task: {task_name}")
-            task_results = self.process_task(task_parameters)
-            completion_report = self._create_completion_report(original_message_id, task_results)
-            self._send_json_message(completion_report)
-            
-        elif message_type == "health_check":
-            self.logger.info("Responding to health check")
-            health_response = self._create_health_check_response()
-            self._send_json_message(health_response)
+            elif intent == "health_check":
+                # Health check
+                self.logger.info("Responding to health check")
+                health_response = self._create_supervisor_health_response(request_id)
+                self._send_json_message(health_response)
+        
+        else:
+            # Unsupported intent
+            self.logger.warning(f"Unsupported intent: {intent}")
+            error_response = self._create_supervisor_error_response(
+                request_id=request_id,
+                error_code="UNSUPPORTED_INTENT",
+                error_message=f"Unsupported intent: '{intent}'. This agent only supports 'update_wiki' and 'health_check'"
+            )
+            self._send_json_message(error_response)
 

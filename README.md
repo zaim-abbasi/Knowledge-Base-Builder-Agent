@@ -200,15 +200,69 @@ agent.handle_incoming_message(json.dumps(task_message))
 ## **Integration**
 
 ### **With Supervisor/Registry**
-The agent communicates via JSON messages following the protocol:
-1. Supervisor sends `task_assignment` or `health_check` messages
-2. Agent validates and processes messages
-3. Agent responds with `completion_report`, `health_check_response`, or `error_report`
+
+The agent uses **Supervisor format natively** for seamless integration with the Supervisor system.
+
+#### **Supervisor Format (Native Format)**
+
+**Supervisor → Agent Request:**
+```json
+{
+  "request_id": "550e8400-e29b-41d4-a716-446655440000",
+  "agent_name": "KnowledgeBaseBuilderAgent",
+  "intent": "update_wiki",
+  "input": {
+    "text": "# Team Wiki\n\n## Daily Update\nToday we...",
+    "metadata": {
+      "update_mode": "overwrite"
+    }
+  },
+  "context": {
+    "user_id": "user123",
+    "conversation_id": "conv456",
+    "timestamp": "2025-11-21T10:00:00Z"
+  }
+}
+```
+
+**Agent → Supervisor Response (Success):**
+```json
+{
+  "request_id": "550e8400-e29b-41d4-a716-446655440000",
+  "agent_name": "KnowledgeBaseBuilderAgent",
+  "status": "success",
+  "output": {
+    "result": "Wiki updated successfully using overwrite mode",
+    "confidence": 0.95,
+    "details": {
+      "status": "success",
+      "message": "Wiki updated successfully using overwrite mode",
+      "wiki_size": 72,
+      "update_mode": "overwrite",
+      "agent_id": "KnowledgeBaseBuilderAgent"
+    }
+  },
+  "error": null
+}
+```
+
+**Agent → Supervisor Response (Error):**
+```json
+{
+  "status": "error",
+  "output": null,
+  "error": {
+    "type": "MISSING_PARAMETER",
+    "message": "Missing required parameter: wiki_update_content"
+  }
+}
+```
 
 ### **Message Routing**
-- Messages must include `sender` and `recipient` fields
-- Agent validates `recipient` matches its `agent_id`
-- All responses include `related_message_id` for correlation
+- Messages must be in Supervisor format with `request_id`, `agent_name`, `intent`, `input`, and `context` fields
+- Agent validates `agent_name` matches its `agent_id`
+- All responses include `request_id` for correlation
+- Responses follow Supervisor format: success with `output` or error with `error`
 
 ### **Testing**
 Run integration tests: `python tests/test_message_handling.py`
