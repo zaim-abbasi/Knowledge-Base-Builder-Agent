@@ -17,12 +17,10 @@ Based on the Supervisor repository, your agent implements the exact contract:
 {
   "request_id": "string (required)",
   "agent_name": "KnowledgeBaseBuilderAgent (required)",
-  "intent": "update_wiki (required)",
+  "intent": "create_task (required)",
   "input": {
-    "text": "string - wiki content (required)",
-    "metadata": {
-      "update_mode": "overwrite | append (optional, default: overwrite)"
-    }
+    "text": "string - plain English task description (required)",
+    "metadata": {}
   },
   "context": {
     "user_id": "string (required)",
@@ -31,6 +29,11 @@ Based on the Supervisor repository, your agent implements the exact contract:
   }
 }
 ```
+
+**Input.text Examples:**
+- Structured: "Task ID: PROJ-001, Task Name: Build API, Description: Create REST API, Deadline: 2025-12-31"
+- Plain English: "I need to implement user authentication by next week"
+- Minimal: "authentication" or "fix bug" or "update docs"
 
 ### Worker → Supervisor (Success Response)
 ```json
@@ -43,9 +46,10 @@ Based on the Supervisor repository, your agent implements the exact contract:
     "confidence": 0.95,
     "details": {
       "status": "success",
-      "message": "Wiki updated successfully using overwrite mode",
-      "wiki_size": 1234,
-      "update_mode": "overwrite",
+      "message": "Task created successfully: TASK-001",
+      "task_id": "TASK-001",
+      "task_name": "Implement Authentication System",
+      "task_status": "todo",
       "agent_id": "KnowledgeBaseBuilderAgent"
     }
   },
@@ -74,19 +78,20 @@ Add this entry to your Supervisor's agent registry:
 ```json
 {
   "name": "KnowledgeBaseBuilderAgent",
-  "description": "Updates team wiki from daily work interactions. Supports overwrite and append modes for wiki content management.",
-  "intents": ["update_wiki"],
+  "description": "Creates and manages tasks from plain English input. Uses LLM to parse task information and stores tasks in MongoDB. Handles any input format from structured to single words.",
+  "intents": ["create_task"],
   "type": "http",
   "endpoint": "http://your-host:5000/message",
   "healthcheck": "http://your-host:5000/health",
-  "timeout_ms": 10000
+  "timeout_ms": 30000
 }
 ```
 
 **Important Notes:**
-- Replace `your-host` with your actual hostname/IP (e.g., `localhost`, `192.168.1.100`, or your cloud hostname)
-- Default port is `5000` (configurable via `python api_server.py <port> <host>`)
-- `timeout_ms` should be sufficient for wiki operations (10 seconds is recommended)
+- Replace `your-host` with your actual hostname/IP (e.g., `localhost`, `192.168.1.100`, or your cloud hostname like `vps.zaim-abbasi.tech`)
+- Default port is `5000` (configurable via environment variables or command line)
+- `timeout_ms` should be sufficient for LLM processing (30 seconds recommended for LLM calls)
+
 
 ---
 
@@ -124,7 +129,7 @@ Expected response:
 }
 ```
 
-### 3. Test Task Assignment
+### 3. Test Task Creation
 
 ```bash
 curl -X POST http://localhost:5000/message \
@@ -132,12 +137,29 @@ curl -X POST http://localhost:5000/message \
   -d '{
     "request_id": "test-123",
     "agent_name": "KnowledgeBaseBuilderAgent",
-    "intent": "update_wiki",
+    "intent": "create_task",
     "input": {
-      "text": "# Test Wiki\n\nThis is a test entry.",
-      "metadata": {
-        "update_mode": "overwrite"
-      }
+      "text": "Task ID: TEST-001, Task Name: Test Integration, Description: Verify Supervisor integration works correctly, Deadline: 2025-12-31",
+      "metadata": {}
+    },
+    "context": {
+      "user_id": "test_user",
+      "timestamp": "2025-01-21T10:00:00Z"
+    }
+  }'
+```
+
+Or with plain English:
+```bash
+curl -X POST http://localhost:5000/message \
+  -H "Content-Type: application/json" \
+  -d '{
+    "request_id": "test-124",
+    "agent_name": "KnowledgeBaseBuilderAgent",
+    "intent": "create_task",
+    "input": {
+      "text": "I need to implement user authentication by next week",
+      "metadata": {}
     },
     "context": {
       "user_id": "test_user",
@@ -182,9 +204,15 @@ CMD ["python", "api_server.py", "5000", "0.0.0.0"]
 
 Your agent currently supports:
 
-1. **`update_wiki`** - Updates the team wiki
-   - **Input.text:** Wiki content (markdown supported)
-   - **Input.metadata.update_mode:** `"overwrite"` (default) or `"append"`
+1. **`create_task`** - Creates a new task from plain English input
+   - **Input.text:** Plain English task description (any format: structured, unstructured, single words, phrases, sentences)
+   - **Input.metadata:** Optional metadata (currently unused, can be empty object)
+   - **LLM Processing:** Automatically extracts task_id, task_name, task_description, task_deadline
+   - **Storage:** Stores task in MongoDB with defaults: `task_status="todo"`, `depends_on=None`
+   - **Input Examples:**
+     - Structured: "Task ID: PROJ-001, Task Name: Build API, Deadline: 2025-12-31"
+     - Plain English: "I need to fix the login bug by next Monday"
+     - Minimal: "authentication" or "update docs"
 
 2. **`health_check`** - Health check (handled automatically by Supervisor)
 
@@ -202,9 +230,11 @@ Your agent returns these error codes (matching Supervisor format):
 | `INVALID_TYPE` | Wrong data type for field |
 | `INVALID_AGENT` | Agent name doesn't match |
 | `VALIDATION_ERROR` | Message validation failed |
-| `UNSUPPORTED_INTENT` | Intent not supported (only `update_wiki` and `health_check` supported) |
-| `MISSING_PARAMETER` | Missing `input.text` for wiki update |
-| `LTM_WRITE_FAILED` | Failed to write to LTM |
+| `UNSUPPORTED_INTENT` | Intent not supported (only `create_task` and `health_check` supported) |
+| `MISSING_PARAMETER` | Missing `input.text` for task creation |
+| `INITIALIZATION_ERROR` | Database or LLM parser not initialized |
+| `LLM_PARSING_ERROR` | Failed to parse task input with LLM |
+| `DATABASE_ERROR` | Failed to create task in MongoDB |
 | `PROCESSING_ERROR` | General processing error |
 | `INVALID_CONTENT_TYPE` | Content-Type must be application/json (API level) |
 | `NO_RESPONSE` | No response generated by agent (API level) |
@@ -234,17 +264,15 @@ print(f"Status: {response.status_code}")
 print(f"Response: {json.dumps(response.json(), indent=2)}")
 print()
 
-# Test 2: Wiki Update
-print("Testing wiki update...")
+# Test 2: Task Creation
+print("Testing task creation...")
 request = {
     "request_id": str(uuid.uuid4()),
     "agent_name": "KnowledgeBaseBuilderAgent",
-    "intent": "update_wiki",
+    "intent": "create_task",
     "input": {
-        "text": "# Test Wiki\n\nThis is a test entry from Supervisor integration.",
-        "metadata": {
-            "update_mode": "overwrite"
-        }
+        "text": "Task ID: INTEGRATION-TEST-001, Task Name: Test Supervisor Integration, Description: Verify that the agent works correctly with Supervisor, Deadline: 2025-12-31",
+        "metadata": {}
     },
     "context": {
         "user_id": "integration_test",
@@ -280,14 +308,17 @@ print(f"Response: {json.dumps(response.json(), indent=2)}")
 1. Check agent logs for detailed error messages
 2. Verify request format matches Supervisor contract exactly
 3. Ensure `agent_name` in request matches `"KnowledgeBaseBuilderAgent"`
-4. Check that `intent` is `"update_wiki"` (not `"update_wiki"` with typos)
+4. Check that `intent` is `"create_task"` (not `"update_wiki"` or other intents)
+5. Verify MongoDB connection and LLM API key are configured in `.env` file
+6. Check that `input.text` contains task description (can be plain English)
 
 ### Issue: Timeout errors
 
 **Solutions:**
-1. Increase `timeout_ms` in registry entry
-2. Check agent processing time (LTM operations can be slow on first run)
+1. Increase `timeout_ms` in registry entry (recommended: 30000ms for LLM processing)
+2. Check agent processing time (LLM API calls can take 3-5 seconds)
 3. Verify network latency
+4. Check LLM API key and base URL in `.env` file
 
 ---
 

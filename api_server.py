@@ -148,6 +148,8 @@ def health_check():
             return jsonify(response), 200
         else:
             # Fallback Supervisor format response
+            from datetime import datetime, timezone
+            timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             return jsonify({
                 "request_id": health_check_message["request_id"],
                 "agent_name": agent.agent_id,
@@ -155,7 +157,7 @@ def health_check():
                 "output": {
                     "result": "I'm up and ready",
                     "confidence": 1.0,
-                    "details": {}
+                    "details": f"Health check successful at {timestamp}"
                 },
                 "error": None
             }), 200

@@ -305,7 +305,7 @@ class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
           "output": {
             "result": "...",
             "confidence": 0.95,
-            "details": {...}
+            "details": "Task ID: X, Task Name: Y, Status: Z"
           },
           "error": null
         }
@@ -317,6 +317,13 @@ class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
         Returns:
             Dictionary containing the Supervisor format success response
         """
+        # Format details as a readable string
+        task_id = task_results.get("task_id", "N/A")
+        task_name = task_results.get("task_name", "N/A")
+        task_status = task_results.get("task_status", "N/A")
+        
+        details_string = f"Task ID: {task_id}, Task Name: {task_name}, Status: {task_status}"
+        
         return {
             "request_id": request_id,
             "agent_name": self.agent_id,
@@ -324,7 +331,7 @@ class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
             "output": {
                 "result": task_results.get("message", "Task completed successfully"),
                 "confidence": 0.95,
-                "details": task_results
+                "details": details_string
             },
             "error": None
         }
@@ -373,6 +380,9 @@ class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
         Returns:
             Dictionary containing the Supervisor format health response
         """
+        timestamp = self._get_current_timestamp()
+        details_string = f"Health check successful at {timestamp}"
+        
         response = {
             "request_id": request_id or "health-check",
             "agent_name": self.agent_id,
@@ -380,10 +390,7 @@ class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
             "output": {
                 "result": "I'm up and ready",
                 "confidence": 1.0,
-                "details": {
-                    "type": "health_check",
-                    "timestamp": self._get_current_timestamp()
-                }
+                "details": details_string
             },
             "error": None
         }
