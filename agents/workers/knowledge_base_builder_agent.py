@@ -1,6 +1,4 @@
 import json
-import uuid
-import os
 import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
@@ -279,10 +277,6 @@ class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
         return self._ltm.get(key, None)
     
     
-    def _generate_message_id(self) -> str:
-        """Generate a new UUID string for message identification."""
-        return str(uuid.uuid4())
-    
     def _get_current_timestamp(self) -> str:
         """Get current UTC time in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)."""
         return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -400,7 +394,6 @@ class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
         """Check if message is in Supervisor format.
         
         Supervisor format has: request_id, agent_name, intent, input, context
-        Legacy format has: message_id, sender, recipient, type, task
         
         Args:
             message_dict: Dictionary containing the message
