@@ -40,7 +40,7 @@ def handle_message():
     {
       "request_id": "...",
       "agent_name": "KnowledgeBaseBuilderAgent",
-      "intent": "update_wiki" | "health_check",
+        "intent": "create_task" | "health_check",
       "input": {
         "text": "...",
         "metadata": {...}
@@ -189,9 +189,9 @@ def root():
             "request": {
                 "request_id": "string (required)",
                 "agent_name": "KnowledgeBaseBuilderAgent (required)",
-                "intent": "update_wiki | health_check (required)",
+                "intent": "create_task | health_check (required)",
                 "input": {
-                    "text": "string (required for update_wiki)",
+                    "text": "string (required for create_task)",
                     "metadata": "object (optional)"
                 },
                 "context": {
@@ -220,7 +220,7 @@ def root():
                 }
             }
         },
-        "intents": ["update_wiki", "health_check"]
+        "intents": ["create_task", "health_check"]
     }), 200
 
 

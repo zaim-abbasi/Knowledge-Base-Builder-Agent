@@ -7,10 +7,12 @@ from pathlib import Path
 from typing import Any, Optional, Dict, Tuple
 from agents.workers.abstract_worker_agent import AbstractWorkerAgent
 from shared.utils import setup_logger
+from shared.database import TaskDatabase
+from shared.llm_parser import LLMTaskParser
 
 
 class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
-    """Worker agent that builds and maintains a team wiki knowledge base."""
+    """Worker agent that processes tasks and stores them in MongoDB."""
     
     def __init__(self, agent_id: str, supervisor_id: str):
         """Initialize the agent.
@@ -22,16 +24,24 @@ class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
         super().__init__(agent_id, supervisor_id)
         self.logger = setup_logger(self.__class__.__name__)
         self._ltm: Dict[str, Any] = {}
-        self._wiki_key = "team_wiki_content"
         self._cache_key = "request_response_cache"
         
-        # Setup LTM directory
+        # Setup LTM directory for cache
         self._ltm_dir = Path("LTM")
         self._ltm_dir.mkdir(exist_ok=True)
-        self._wiki_file = self._ltm_dir / "wiki.json"
         self._cache_file = self._ltm_dir / "cache.json"
         
-        # Load LTM from disk on startup
+        # Initialize MongoDB and LLM
+        try:
+            self.db = TaskDatabase()
+            self.llm_parser = LLMTaskParser()
+            self.logger.info("MongoDB and LLM parser initialized successfully")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize database or LLM: {str(e)}")
+            self.db = None
+            self.llm_parser = None
+        
+        # Load LTM cache from disk on startup
         self._load_ltm_from_disk()
         
         self.logger.info(f"Initialized {agent_id} with supervisor {supervisor_id}")
@@ -90,19 +100,19 @@ class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
         self.logger.debug(f"Stored response in LTM cache: {request_hash[:8]}...")
     
     def process_task(self, task_data: dict) -> dict:
-        """Process wiki update task.
+        """Process task creation request.
         
         Per project requirements: First searches LTM for cached response,
-        otherwise executes the agent flow and stores successful response.
+        otherwise executes the agent flow (LLM parsing + MongoDB storage) and stores successful response.
         
         Args:
-            task_data: Dict with "wiki_update_content" (str) and optional "update_mode" ("append"|"overwrite")
+            task_data: Dict with "input_text" (str) containing natural language task description
             
         Returns:
-            Dict with "status", "message", and optionally "wiki_size" and "update_mode"
+            Dict with "status", "message", and task details
         """
         try:
-            self.logger.info("Processing wiki update task")
+            self.logger.info("Processing task creation request")
             
             # Step 1: Search LTM first (project requirement)
             cached_response = self._search_ltm_cache(task_data)
@@ -113,55 +123,72 @@ class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
             # Step 2: Execute agent flow (not found in LTM)
             self.logger.info("Request not found in LTM cache, executing agent flow")
             
-            wiki_content = task_data.get("wiki_update_content")
-            if wiki_content is None:
-                self.logger.warning("Missing required parameter: wiki_update_content")
+            input_text = task_data.get("input_text")
+            if not input_text:
+                self.logger.warning("Missing required parameter: input_text")
                 return {
                     "status": "error",
-                    "message": "Missing required parameter: wiki_update_content",
+                    "message": "Missing required parameter: input_text",
                     "error_code": "MISSING_PARAMETER"
                 }
             
-            update_mode = task_data.get("update_mode", "overwrite").lower()
-            self.logger.debug(f"Update mode: {update_mode}")
-            
-            if update_mode == "append":
-                existing_content = self.read_from_ltm(self._wiki_key)
-                if existing_content:
-                    updated_content = f"{existing_content}\n\n{wiki_content}"
-                    self.logger.debug("Appending to existing wiki content")
-                else:
-                    updated_content = wiki_content
-                    self.logger.debug("No existing content, using new content")
-            else:
-                updated_content = wiki_content
-                self.logger.debug("Overwriting wiki content")
-            
-            success = self.write_to_ltm(self._wiki_key, updated_content)
-            
-            if success:
-                wiki_size = len(updated_content)
-                self.logger.info(f"Wiki updated successfully: {wiki_size} characters using {update_mode} mode")
-                
-                response = {
-                    "status": "success",
-                    "message": f"Wiki updated successfully using {update_mode} mode",
-                    "wiki_size": wiki_size,
-                    "update_mode": update_mode,
-                    "agent_id": self.agent_id
-                }
-                
-                # Step 3: Store successful response in LTM cache (project requirement)
-                self._store_in_ltm_cache(task_data, response)
-                
-                return response
-            else:
-                self.logger.error("Failed to write wiki content to LTM")
+            # Check if database and LLM are initialized
+            if not self.db or not self.llm_parser:
+                self.logger.error("Database or LLM parser not initialized")
                 return {
                     "status": "error",
-                    "message": "Failed to write wiki content to LTM",
-                    "error_code": "LTM_WRITE_FAILED"
+                    "message": "Database or LLM parser not initialized",
+                    "error_code": "INITIALIZATION_ERROR"
                 }
+            
+            # Step 2a: Parse input with LLM
+            self.logger.info("Parsing task input with LLM")
+            parsed_task = self.llm_parser.parse_task_input(input_text)
+            
+            if not parsed_task:
+                self.logger.error("Failed to parse task input with LLM")
+                return {
+                    "status": "error",
+                    "message": "Failed to parse task input with LLM",
+                    "error_code": "LLM_PARSING_ERROR"
+                }
+            
+            # Step 2b: Prepare task document with defaults
+            task_doc = {
+                "task_id": parsed_task.get("task_id", ""),
+                "task_name": parsed_task.get("task_name", ""),
+                "task_description": parsed_task.get("task_description", ""),
+                "task_deadline": parsed_task.get("task_deadline", ""),
+                "task_status": "todo",  # Default status
+                "depends_on": None  # Default to None for new tasks
+            }
+            
+            # Step 2c: Store in MongoDB
+            self.logger.info(f"Storing task in MongoDB: {task_doc['task_id']}")
+            task_id = self.db.create_task(task_doc)
+            
+            if not task_id:
+                self.logger.error("Failed to create task in MongoDB")
+                return {
+                    "status": "error",
+                    "message": "Failed to create task in MongoDB",
+                    "error_code": "DATABASE_ERROR"
+                }
+            
+            # Step 3: Store successful response in LTM cache (project requirement)
+            response = {
+                "status": "success",
+                "message": f"Task created successfully: {task_id}",
+                "task_id": task_id,
+                "task_name": task_doc["task_name"],
+                "task_status": task_doc["task_status"],
+                "agent_id": self.agent_id
+            }
+            
+            self._store_in_ltm_cache(task_data, response)
+            
+            self.logger.info(f"Task created successfully: {task_id}")
+            return response
                 
         except Exception as e:
             self.logger.error(f"Error processing task: {str(e)}", exc_info=True)
@@ -188,17 +215,8 @@ class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
         print(message_json)
     
     def _load_ltm_from_disk(self):
-        """Load LTM data from disk files on startup."""
+        """Load LTM cache from disk files on startup."""
         try:
-            # Load wiki content
-            if self._wiki_file.exists():
-                with open(self._wiki_file, 'r', encoding='utf-8') as f:
-                    wiki_data = json.load(f)
-                    self._ltm[self._wiki_key] = wiki_data.get("content", "")
-                    self.logger.info(f"Loaded wiki content from LTM: {len(self._ltm.get(self._wiki_key, ''))} characters")
-            else:
-                self.logger.info("No existing wiki content found in LTM")
-            
             # Load request-response cache
             if self._cache_file.exists():
                 with open(self._cache_file, 'r', encoding='utf-8') as f:
@@ -213,24 +231,12 @@ class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
         except Exception as e:
             self.logger.error(f"Error loading LTM from disk: {str(e)}", exc_info=True)
             # Initialize empty if load fails
-            if self._wiki_key not in self._ltm:
-                self._ltm[self._wiki_key] = ""
             if self._cache_key not in self._ltm:
                 self._ltm[self._cache_key] = {}
     
     def _save_ltm_to_disk(self):
-        """Save LTM data to disk files."""
+        """Save LTM cache to disk files."""
         try:
-            # Save wiki content
-            wiki_content = self._ltm.get(self._wiki_key, "")
-            wiki_data = {
-                "content": wiki_content,
-                "last_updated": self._get_current_timestamp(),
-                "size": len(wiki_content) if isinstance(wiki_content, str) else 0
-            }
-            with open(self._wiki_file, 'w', encoding='utf-8') as f:
-                json.dump(wiki_data, f, indent=2, ensure_ascii=False)
-            
             # Save request-response cache
             cache_data = self._ltm.get(self._cache_key, {})
             with open(self._cache_file, 'w', encoding='utf-8') as f:
@@ -252,8 +258,8 @@ class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
         try:
             self._ltm[key] = value
             
-            # Persist to disk if it's wiki content or cache
-            if key == self._wiki_key or key == self._cache_key:
+            # Persist to disk if it's cache
+            if key == self._cache_key:
                 self._save_ltm_to_disk()
             
             return True
@@ -272,13 +278,6 @@ class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
         """
         return self._ltm.get(key, None)
     
-    def get_wiki_content(self) -> Optional[str]:
-        """Retrieve the current wiki content.
-        
-        Returns:
-            The current wiki content, or None if not found
-        """
-        return self.read_from_ltm(self._wiki_key)
     
     def _generate_message_id(self) -> str:
         """Generate a new UUID string for message identification."""
@@ -454,9 +453,11 @@ class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
         input_data = message_dict.get("input")
         if not isinstance(input_data, dict):
             return (False, "INVALID_TYPE", "Field 'input' must be a dictionary")
-        if "text" not in input_data:
+        # text is required for create_task, but can be empty for health_check
+        intent = message_dict.get("intent", "")
+        if intent != "health_check" and "text" not in input_data:
             return (False, "MISSING_FIELD", "Missing required field: 'input.text'")
-        if not isinstance(input_data.get("text"), str):
+        if "text" in input_data and not isinstance(input_data.get("text"), str):
             return (False, "INVALID_TYPE", "Field 'input.text' must be a string")
         if "metadata" in input_data and not isinstance(input_data.get("metadata"), dict):
             return (False, "INVALID_TYPE", "Field 'input.metadata' must be a dictionary")
@@ -538,12 +539,11 @@ class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
         metadata = input_data.get("metadata", {})
         
         # Handle different intents
-        if intent == "update_wiki" or intent == "health_check":
-            if intent == "update_wiki":
+        if intent == "create_task" or intent == "health_check":
+            if intent == "create_task":
                 # Build task parameters from Supervisor format
                 task_parameters = {
-                    "wiki_update_content": text,
-                    "update_mode": metadata.get("update_mode", "overwrite")
+                    "input_text": text
                 }
                 
                 # Process the task
@@ -574,7 +574,7 @@ class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
             error_response = self._create_supervisor_error_response(
                 request_id=request_id,
                 error_code="UNSUPPORTED_INTENT",
-                error_message=f"Unsupported intent: '{intent}'. This agent only supports 'update_wiki' and 'health_check'"
+                error_message=f"Unsupported intent: '{intent}'. This agent only supports 'create_task' and 'health_check'"
             )
             self._send_json_message(error_response)
 

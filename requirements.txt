@@ -2,3 +2,6 @@
 flask>=2.3.0  # HTTP API server
 requests>=2.31.0  # For testing and supervisor communication
 gunicorn>=21.2.0  # Production WSGI server (for Ubuntu deployment)
+pymongo[srv]>=4.6.0  # MongoDB driver
+openai>=1.12.0  # OpenAI API client
+python-dotenv>=1.0.0  # Environment variable management
