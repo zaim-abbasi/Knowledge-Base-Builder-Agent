@@ -139,9 +139,11 @@ class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
                     "error_code": "INITIALIZATION_ERROR"
                 }
             
-            # Step 2a: Parse input with LLM
-            self.logger.info("Parsing task input with LLM")
-            parsed_task = self.llm_parser.parse_task_input(input_text)
+            # Step 2a: Parse input with LLM (pass current date for accurate deadline calculation)
+            from datetime import datetime
+            current_date = datetime.now().strftime("%Y-%m-%d")
+            self.logger.info(f"Parsing task input with LLM (current date: {current_date})")
+            parsed_task = self.llm_parser.parse_task_input(input_text, current_date=current_date)
             
             if not parsed_task:
                 self.logger.error("Failed to parse task input with LLM")

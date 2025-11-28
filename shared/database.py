@@ -56,12 +56,50 @@ class TaskDatabase:
             logger.error(f"Error connecting to MongoDB: {str(e)}")
             raise
     
+    def _get_next_numeric_task_id(self) -> str:
+        """Get the next numeric task ID.
+        
+        Finds the maximum numeric task_id in the database and returns the next number.
+        If no tasks exist, returns "1".
+        
+        Returns:
+            Next task ID as string (e.g., "1", "2", "3")
+        """
+        try:
+            # Get all tasks and extract numeric IDs
+            all_tasks = list(self.collection.find({}, {"task_id": 1}))
+            max_id = 0
+            
+            for task in all_tasks:
+                task_id = task.get("task_id", "")
+                # Try to parse as integer
+                try:
+                    numeric_id = int(task_id)
+                    if numeric_id > max_id:
+                        max_id = numeric_id
+                except (ValueError, TypeError):
+                    # Skip non-numeric IDs
+                    continue
+            
+            # Return next ID
+            next_id = str(max_id + 1)
+            logger.debug(f"Generated next numeric task ID: {next_id}")
+            return next_id
+            
+        except Exception as e:
+            logger.error(f"Error getting next task ID: {str(e)}")
+            # Fallback to 1 if error
+            return "1"
+    
     def create_task(self, task_data: Dict[str, Any]) -> Optional[str]:
         """Create a new task in the database.
         
+        Automatically assigns a numeric task_id if not provided.
+        Prevents duplicate task_ids.
+        
         Args:
             task_data: Dictionary containing task fields:
-                - task_id: str
+                - task_id: str (optional, will be auto-generated as numeric if not provided)
                 - task_name: str
                 - task_description: str
                 - task_deadline: str
@@ -72,9 +110,22 @@ class TaskDatabase:
             Inserted task_id if successful, None otherwise
         """
         try:
+            # Generate numeric task_id if not provided
+            provided_task_id = task_data.get("task_id", "")
+            if not provided_task_id:
+                task_id = self._get_next_numeric_task_id()
+            else:
+                # Check if task_id already exists
+                existing = self.collection.find_one({"task_id": provided_task_id})
+                if existing:
+                    logger.warning(f"Task ID '{provided_task_id}' already exists, generating new numeric ID")
+                    task_id = self._get_next_numeric_task_id()
+                else:
+                    task_id = provided_task_id
+            
             # Ensure defaults
             task_doc = {
-                "task_id": task_data.get("task_id"),
+                "task_id": task_id,
                 "task_name": task_data.get("task_name", ""),
                 "task_status": task_data.get("task_status", "todo"),
                 "task_description": task_data.get("task_description", ""),
@@ -82,17 +133,19 @@ class TaskDatabase:
                 "depends_on": task_data.get("depends_on", None)
             }
             
-            # Validate required fields
-            if not task_doc["task_id"]:
-                logger.error("task_id is required")
-                return None
+            # Final check: ensure task_id doesn't exist (race condition protection)
+            existing = self.collection.find_one({"task_id": task_id})
+            if existing:
+                logger.warning(f"Task ID '{task_id}' exists, generating new numeric ID")
+                task_id = self._get_next_numeric_task_id()
+                task_doc["task_id"] = task_id
             
             # Insert into collection
             result = self.collection.insert_one(task_doc)
             
             if result.inserted_id:
-                logger.info(f"Task created successfully: {task_doc['task_id']}")
-                return task_doc["task_id"]
+                logger.info(f"Task created successfully with ID: {task_id}")
+                return task_id
             else:
                 logger.error("Failed to insert task")
                 return None
