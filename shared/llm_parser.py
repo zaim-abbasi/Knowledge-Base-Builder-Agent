@@ -55,8 +55,8 @@ class LLMTaskParser:
             # LLM uses natural language understanding to distinguish task content from meta-language
             prompt = f"""Date: {current_date}. Extract JSON:
 task_id: ""
-task_name: title case, expand if needed
-task_description: extract only the actual task content, remove any language about creating/managing the task itself
+task_name: SHORT concise title (3-5 words), main action only. Examples: "Update Knowledge Base" not "I Updated the Knowledge Base Agent for Performance"
+task_description: complete task description, remove meta-language about creating/managing tasks
 task_deadline: ISO YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS if time, convert relative dates, "" if none
 
 Input: {input_text}"""
