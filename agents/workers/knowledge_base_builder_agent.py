@@ -10,15 +10,8 @@ from shared.llm_parser import LLMTaskParser
 
 
 class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
-    """Worker agent that processes tasks and stores them in MongoDB."""
     
     def __init__(self, agent_id: str, supervisor_id: str):
-        """Initialize the agent.
-        
-        Args:
-            agent_id: Unique identifier for this agent
-            supervisor_id: Identifier of the supervisor agent
-        """
         super().__init__(agent_id, supervisor_id)
         self.logger = setup_logger(self.__class__.__name__)
         self._ltm: Dict[str, Any] = {}
@@ -45,26 +38,10 @@ class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
         self.logger.info(f"Initialized {agent_id} with supervisor {supervisor_id}")
     
     def _generate_request_hash(self, task_data: dict) -> str:
-        """Generate a hash for the request to use as cache key.
-        
-        Args:
-            task_data: Dictionary containing task parameters
-            
-        Returns:
-            SHA256 hash string of the request
-        """
         request_str = json.dumps(task_data, sort_keys=True)
         return hashlib.sha256(request_str.encode()).hexdigest()
     
     def _search_ltm_cache(self, task_data: dict) -> Optional[dict]:
-        """Search LTM cache for a matching request.
-        
-        Args:
-            task_data: Dictionary containing task parameters
-            
-        Returns:
-            Cached response if found, None otherwise
-        """
         cache = self.read_from_ltm(self._cache_key)
         if not cache:
             return None
@@ -79,12 +56,6 @@ class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
         return None
     
     def _store_in_ltm_cache(self, task_data: dict, response: dict):
-        """Store successful request-response pair in LTM cache.
-        
-        Args:
-            task_data: Dictionary containing task parameters
-            response: Dictionary containing the response
-        """
         cache = self.read_from_ltm(self._cache_key) or {}
         request_hash = self._generate_request_hash(task_data)
         
@@ -98,17 +69,6 @@ class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
         self.logger.debug(f"Stored response in LTM cache: {request_hash[:8]}...")
     
     def process_task(self, task_data: dict) -> dict:
-        """Process task creation request.
-        
-        Per project requirements: First searches LTM for cached response,
-        otherwise executes the agent flow (LLM parsing + MongoDB storage) and stores successful response.
-        
-        Args:
-            task_data: Dict with "input_text" (str) containing natural language task description
-            
-        Returns:
-            Dict with "status", "message", and task details
-        """
         try:
             self.logger.info("Processing task creation request")
             
@@ -199,23 +159,9 @@ class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
             }
     
     def send_message(self, recipient: str, message_obj: dict):
-        """Send a message to another agent (prints JSON to stdout).
-        
-        Args:
-            recipient: Identifier of the recipient agent
-            message_obj: Dictionary containing the message data
-        """
-        message_json = json.dumps({
-            "from": self.agent_id,
-            "to": recipient,
-            "message": message_obj
-        }, indent=2)
-        
-        print(f"[Message from {self.agent_id} to {recipient}]")
-        print(message_json)
+        pass
     
     def _load_ltm_from_disk(self):
-        """Load LTM cache from disk files on startup."""
         try:
             # Load request-response cache
             if self._cache_file.exists():
@@ -235,7 +181,6 @@ class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
                 self._ltm[self._cache_key] = {}
     
     def _save_ltm_to_disk(self):
-        """Save LTM cache to disk files."""
         try:
             # Save request-response cache
             cache_data = self._ltm.get(self._cache_key, {})
@@ -246,15 +191,6 @@ class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
             self.logger.error(f"Error saving LTM to disk: {str(e)}", exc_info=True)
     
     def write_to_ltm(self, key: str, value: Any) -> bool:
-        """Store a key-value pair in LTM (in-memory and persistent).
-        
-        Args:
-            key: The key to store the value under
-            value: The value to store
-            
-        Returns:
-            True if successful, False otherwise
-        """
         try:
             self._ltm[key] = value
             
@@ -268,27 +204,13 @@ class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
             return False
     
     def read_from_ltm(self, key: str) -> Optional[Any]:
-        """Retrieve a value from LTM.
-        
-        Args:
-            key: The key to retrieve the value for
-            
-        Returns:
-            The value associated with the key, or None if not found
-        """
         return self._ltm.get(key, None)
     
     
     def _get_current_timestamp(self) -> str:
-        """Get current UTC time in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)."""
         return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     
     def _send_json_message(self, message_dict: dict):
-        """Send a JSON message by printing it to stdout.
-        
-        Args:
-            message_dict: Dictionary containing the message to send
-        """
         message_json = json.dumps(message_dict, indent=2)
         message_type = message_dict.get('type', 'unknown')
         recipient = message_dict.get('recipient', 'unknown')
@@ -297,28 +219,6 @@ class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
         print(message_json)
     
     def _create_supervisor_success_response(self, request_id: str, task_results: dict) -> dict:
-        """Create a Supervisor format success response.
-        
-        Supervisor success format:
-        {
-          "request_id": "...",
-          "agent_name": "...",
-          "status": "success",
-          "output": {
-            "result": "...",
-            "confidence": 0.95,
-            "details": "Task ID: X, Task Name: Y, Status: Z"
-          },
-          "error": null
-        }
-        
-        Args:
-            request_id: The request_id from the original request
-            task_results: The dictionary returned from process_task
-            
-        Returns:
-            Dictionary containing the Supervisor format success response
-        """
         # Format details as a readable string
         task_id = task_results.get("task_id", "N/A")
         task_name = task_results.get("task_name", "N/A")
@@ -339,26 +239,6 @@ class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
         }
     
     def _create_supervisor_error_response(self, request_id: Optional[str], error_code: str, error_message: str) -> dict:
-        """Create a Supervisor format error response.
-        
-        Supervisor error format:
-        {
-          "status": "error",
-          "output": null,
-          "error": {
-            "type": "...",
-            "message": "..."
-          }
-        }
-        
-        Args:
-            request_id: The request_id from the original request (optional for errors)
-            error_code: Error code identifier
-            error_message: Human-readable error message
-            
-        Returns:
-            Dictionary containing the Supervisor format error response
-        """
         response = {
             "status": "error",
             "output": None,
@@ -374,14 +254,6 @@ class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
         return response
     
     def _create_supervisor_health_response(self, request_id: Optional[str] = None) -> dict:
-        """Create a Supervisor format health check response.
-        
-        Args:
-            request_id: Optional request_id from health check request
-            
-        Returns:
-            Dictionary containing the Supervisor format health response
-        """
         timestamp = self._get_current_timestamp()
         details_string = f"Health check successful at {timestamp}"
         
@@ -400,43 +272,9 @@ class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
     
     
     def _is_supervisor_format(self, message_dict: dict) -> bool:
-        """Check if message is in Supervisor format.
-        
-        Supervisor format has: request_id, agent_name, intent, input, context
-        
-        Args:
-            message_dict: Dictionary containing the message
-            
-        Returns:
-            True if message is in Supervisor format, False otherwise
-        """
         return "request_id" in message_dict and "agent_name" in message_dict and "intent" in message_dict
     
     def _validate_supervisor_message(self, message_dict: dict) -> Tuple[bool, Optional[str], Optional[str]]:
-        """Validate an incoming Supervisor format message.
-        
-        Supervisor format:
-        {
-          "request_id": "...",
-          "agent_name": "...",
-          "intent": "...",
-          "input": {
-            "text": "...",
-            "metadata": {...}
-          },
-          "context": {
-            "user_id": "...",
-            "conversation_id": "...",
-            "timestamp": "..."
-          }
-        }
-        
-        Args:
-            message_dict: Dictionary containing the parsed message
-            
-        Returns:
-            Tuple of (is_valid, error_code, error_message). If valid, returns (True, None, None)
-        """
         # Required top-level fields
         required_fields = ["request_id", "agent_name", "intent", "input", "context"]
         for field in required_fields:
@@ -481,16 +319,6 @@ class KnowledgeBaseBuilderAgent(AbstractWorkerAgent):
         return (True, None, None)
     
     def handle_incoming_message(self, json_message: str):
-        """Handle incoming JSON messages from supervisor in Supervisor format.
-        
-        Supervisor format:
-        - Request: { request_id, agent_name, intent, input { text, metadata }, context { user_id, ... } }
-        - Response: { request_id, agent_name, status: success, output { result, confidence, details }, error: null }
-          or { status: error, output: null, error { type, message } }
-        
-        Args:
-            json_message: JSON string containing the incoming Supervisor format message
-        """
         request_id = ""
         
         try:

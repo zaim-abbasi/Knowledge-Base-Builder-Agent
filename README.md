@@ -1,318 +1,151 @@
 # Knowledge Base Builder Agent
 
-A Python agent for handling team wiki updates in a multi-agent system.
+AI agent that creates and manages tasks using natural language input via Supervisor format.
 
 **Key Features:**
-- Processes wiki updates (append/overwrite)
-- Strict JSON handshake protocol for supervisor-agent communication
-- Health monitoring and error reporting
+- Natural language task parsing with LLM
+- MongoDB task storage
+- Supervisor format communication
+- Health monitoring and logging
+- Long-term memory caching
 
 ---
 
-## **Quick Start**
+## Quick Start
 
-### **Installation**
+### Installation
 ```bash
 git clone <repository-url>
 cd knowledge-base-builder-agent
 pip install -r requirements.txt
 ```
 
----
-
-## **Deployment**
-
-### **Testing**
+### Configuration
+Create `.env` file from `.env.example`:
 ```bash
-# Run integration tests
-python tests/test_message_handling.py
+cp .env.example .env
+# Edit .env with your MongoDB and OpenAI credentials
 ```
 
-### **As HTTP API (Flask)**
+### Run API Server
 ```bash
-# Start API server (default: http://127.0.0.1:5000)
 python api_server.py
-
-# Custom host/port
-python api_server.py 8080 0.0.0.0
+# Server runs on http://127.0.0.1:5000
 ```
 
 **API Endpoints:**
-- `POST /message` - Handle incoming JSON messages
-- `GET /health` - Health check endpoint
+- `POST /message` - Handle Supervisor format messages
+- `GET /health` - Health check
 - `GET /` - API information
 
-**Example HTTP Request:**
-```bash
-curl -X POST http://localhost:5000/message \
-  -H "Content-Type: application/json" \
-  -d '{"message_id": "...", "sender": "...", ...}'
-```
-
 ---
 
-## **API Reference for Supervisor**
+## API Reference
 
-### **Agent Identification**
+### Agent Information
 - **Agent ID:** `KnowledgeBaseBuilderAgent`
-- **Supervisor ID:** `SupervisorAgent_Main`
-- **Supported Task:** `update_wiki`
+- **Supported Intent:** `create_task`
+- **Format:** Supervisor format (native)
 
----
-
-### **Message Types**
-
-#### **1. Task Assignment (Supervisor → Agent)**
-**Request:**
-```json
-{
-  "message_id": "550e8400-e29b-41d4-a716-446655440000",
-  "sender": "SupervisorAgent_Main",
-  "recipient": "KnowledgeBaseBuilderAgent",
-  "type": "task_assignment",
-  "task": {
-    "name": "update_wiki",
-    "parameters": {
-      "wiki_update_content": "# Team Wiki\n\n## Daily Update\nToday we...",
-      "update_mode": "overwrite"
-    }
-  },
-  "timestamp": "2025-11-21T10:00:00Z"
-}
-```
-
-**Note:** `update_mode` can be `"overwrite"` (default) or `"append"`.
-
-**Response (Success):**
-```json
-{
-  "message_id": "660e8400-e29b-41d4-a716-446655440000",
-  "sender": "KnowledgeBaseBuilderAgent",
-  "recipient": "SupervisorAgent_Main",
-  "type": "completion_report",
-  "related_message_id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "SUCCESS",
-  "results": {
-    "status": "success",
-    "message": "Wiki updated successfully using overwrite mode",
-    "wiki_size": 72,
-    "update_mode": "overwrite",
-    "agent_id": "KnowledgeBaseBuilderAgent"
-  },
-  "timestamp": "2025-11-21T10:00:05Z"
-}
-```
-
----
-
-#### **2. Health Check (Supervisor → Agent)**
-**Request:**
-```json
-{
-  "message_id": "550e8400-e29b-41d4-a716-446655440001",
-  "sender": "SupervisorAgent_Main",
-  "recipient": "KnowledgeBaseBuilderAgent",
-  "type": "health_check",
-  "timestamp": "2025-11-21T10:05:00Z"
-}
-```
-
-**Response:**
-```json
-{
-  "message_id": "660e8400-e29b-41d4-a716-446655440001",
-  "sender": "KnowledgeBaseBuilderAgent",
-  "recipient": "SupervisorAgent_Main",
-  "type": "health_check_response",
-  "status": "I'm up and ready",
-  "timestamp": "2025-11-21T10:05:00Z"
-}
-```
-
----
-
-#### **3. Error Report (Agent → Supervisor)**
-**Example:**
-```json
-{
-  "message_id": "660e8400-e29b-41d4-a716-446655440003",
-  "sender": "KnowledgeBaseBuilderAgent",
-  "recipient": "SupervisorAgent_Main",
-  "type": "error_report",
-  "related_message_id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "FAILURE",
-  "results": {
-    "error_code": "MISSING_FIELD",
-    "message": "Missing required field: 'type'"
-  },
-  "timestamp": "2025-11-21T10:00:05Z"
-}
-```
-
----
-
-### **Error Codes**
-| Code | Description | Solution |
-|------|-------------|----------|
-| `INVALID_JSON` | Malformed JSON | Validate JSON before sending |
-| `MISSING_FIELD` | Required field missing | Check protocol specification |
-| `INVALID_TYPE` | Wrong data type | Verify field types match protocol |
-| `INVALID_MESSAGE_TYPE` | Unknown message type | Use "task_assignment" or "health_check" |
-| `UNSUPPORTED_TASK` | Task name not supported | Use "update_wiki" |
-| `MISSING_PARAMETER` | Task parameter missing | Provide "wiki_update_content" |
-
----
-
-### **Python Usage Example**
-```python
-from agents.workers.knowledge_base_builder_agent import KnowledgeBaseBuilderAgent
-import json
-import uuid
-from datetime import datetime, timezone
-
-# Initialize agent
-agent = KnowledgeBaseBuilderAgent(
-    agent_id="KnowledgeBaseBuilderAgent",
-    supervisor_id="SupervisorAgent_Main"
-)
-
-# Create and send a task assignment message
-task_message = {
-    "message_id": str(uuid.uuid4()),
-    "sender": "SupervisorAgent_Main",
-    "recipient": "KnowledgeBaseBuilderAgent",
-    "type": "task_assignment",
-    "task": {
-        "name": "update_wiki",
-        "parameters": {
-            "wiki_update_content": "# Team Wiki\n\n## Daily Update\nToday we...",
-            "update_mode": "overwrite"
-        }
-    },
-    "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-}
-
-agent.handle_incoming_message(json.dumps(task_message))
-```
-
----
-
-## **Integration**
-
-### **With Supervisor/Registry**
-
-The agent uses **Supervisor format natively** for seamless integration with the Supervisor system.
-
-#### **Supervisor Format (Native Format)**
-
-**Supervisor → Agent Request:**
+### Create Task Request
 ```json
 {
   "request_id": "550e8400-e29b-41d4-a716-446655440000",
   "agent_name": "KnowledgeBaseBuilderAgent",
-  "intent": "update_wiki",
+  "intent": "create_task",
   "input": {
-    "text": "# Team Wiki\n\n## Daily Update\nToday we...",
-    "metadata": {
-      "update_mode": "overwrite"
-    }
+    "text": "Schedule meeting with CTO at 9 PM today"
   },
   "context": {
     "user_id": "user123",
     "conversation_id": "conv456",
-    "timestamp": "2025-11-21T10:00:00Z"
+    "timestamp": "2025-11-29T10:00:00Z"
   }
 }
 ```
 
-**Agent → Supervisor Response (Success):**
+### Success Response
 ```json
 {
   "request_id": "550e8400-e29b-41d4-a716-446655440000",
   "agent_name": "KnowledgeBaseBuilderAgent",
   "status": "success",
   "output": {
-    "result": "Wiki updated successfully using overwrite mode",
+    "result": "Task created successfully: 15",
     "confidence": 0.95,
-    "details": {
-      "status": "success",
-      "message": "Wiki updated successfully using overwrite mode",
-      "wiki_size": 72,
-      "update_mode": "overwrite",
-      "agent_id": "KnowledgeBaseBuilderAgent"
-    }
+    "details": "Task ID: 15, Task Name: Schedule Meeting With CTO, Status: todo"
   },
   "error": null
 }
 ```
 
-**Agent → Supervisor Response (Error):**
+### Health Check
+```bash
+curl http://localhost:5000/health
+```
+
+**Response:**
 ```json
 {
-  "status": "error",
-  "output": null,
-  "error": {
-    "type": "MISSING_PARAMETER",
-    "message": "Missing required parameter: wiki_update_content"
-  }
+  "request_id": "...",
+  "agent_name": "KnowledgeBaseBuilderAgent",
+  "status": "success",
+  "output": {
+    "result": "I'm up and ready",
+    "confidence": 1.0,
+    "details": "Health check successful at 2025-11-29T10:00:00Z"
+  },
+  "error": null
 }
 ```
 
-### **Message Routing**
-- Messages must be in Supervisor format with `request_id`, `agent_name`, `intent`, `input`, and `context` fields
-- Agent validates `agent_name` matches its `agent_id`
-- All responses include `request_id` for correlation
-- Responses follow Supervisor format: success with `output` or error with `error`
+---
 
-### **Testing**
-Run integration tests: `python tests/test_message_handling.py`
+## Error Codes
+
+| Code | Description |
+|------|-------------|
+| `INVALID_JSON` | Malformed JSON |
+| `MISSING_FIELD` | Required field missing |
+| `INVALID_TYPE` | Wrong data type |
+| `INVALID_AGENT` | Agent name mismatch |
+| `UNSUPPORTED_INTENT` | Intent not supported (only `create_task` and `health_check`) |
+| `MISSING_PARAMETER` | Missing `input.text` |
+| `LLM_PARSING_ERROR` | Failed to parse task input |
+| `DATABASE_ERROR` | MongoDB operation failed |
 
 ---
 
-## **Error Handling**
+## Task Storage
 
-The agent returns `error_report` messages for protocol violations:
-- **Validation Errors:** Missing fields, wrong types, invalid message types
-- **Task Errors:** Unsupported tasks, missing parameters
-- **Processing Errors:** LTM write failures, exceptions
-
-All errors include `error_code` and descriptive `message`. See Error Codes table above.
-
----
-
-## **Long-Term Memory (LTM)**
-
-The agent implements persistent LTM as required by the project:
-
-### **LTM Features**
-- **Persistent Storage**: Wiki content and request-response cache stored in `/LTM` folder
-- **LTM Search First**: On every request, agent searches LTM cache before executing
-- **Request-Response Caching**: Successful responses are cached for improved speed
-- **Auto-Load on Startup**: LTM data is automatically loaded when agent starts
-- **Auto-Save**: Changes are persisted to disk immediately
-
-### **LTM Storage**
-- **Wiki Content**: `LTM/wiki.json` - Stores the team wiki content
-- **Request Cache**: `LTM/cache.json` - Stores request-response pairs for caching
-
-### **How It Works**
-1. **Request arrives** → Agent generates hash of request parameters
-2. **Search LTM** → Checks cache for matching request hash
-3. **If found** → Returns cached response (improved speed)
-4. **If not found** → Executes agent flow, processes task
-5. **On success** → Stores request-response pair in LTM cache
-6. **Persist** → Saves to disk files automatically
+Tasks are stored with the following fields:
+- `task_id`: Auto-generated numeric ID (1, 2, 3, ...)
+- `task_name`: Extracted task name
+- `task_description`: Cleaned task description
+- `task_deadline`: ISO date/datetime format
+- `task_status`: Default "todo"
+- `depends_on`: Default null
 
 ---
 
-## **Configuration**
+## Long-Term Memory (LTM)
 
-### **Logging**
-Logs are output to stdout with timestamps. Configure via `shared/utils.py`.
-
-Agent IDs and settings are configured directly in code (see `api_server.py` and agent initialization).
+- **Request-Response Caching**: Successful responses cached in `LTM/cache.json`
+- **LTM Search First**: Agent checks cache before processing
+- **Auto-Persist**: Cache saved to disk automatically
 
 ---
 
-### **License**
+## Deployment
+
+### Production (Gunicorn + Nginx)
+```bash
+gunicorn -c gunicorn_config.py api_server:app
+```
+
+See deployment documentation for full production setup.
+
+---
+
+## License
 MIT License. See [LICENSE](LICENSE) for details.

@@ -1,5 +1,3 @@
-"""Flask HTTP API server for KnowledgeBaseBuilderAgent."""
-
 from flask import Flask, request, jsonify
 from agents.workers.knowledge_base_builder_agent import KnowledgeBaseBuilderAgent
 from shared.utils import setup_logger
@@ -20,12 +18,10 @@ logger.info("KnowledgeBaseBuilderAgent API server initialized")
 
 
 class MessageCapture:
-    """Capture agent messages for API responses."""
     def __init__(self):
         self.last_message = None
     
     def capture(self, message_dict):
-        """Store the last message sent by the agent."""
         self.last_message = message_dict
 
 
@@ -34,26 +30,6 @@ message_capture = MessageCapture()
 
 @app.route('/message', methods=['POST'])
 def handle_message():
-    """Handle incoming JSON messages from supervisor in Supervisor format.
-    
-    Supervisor format:
-    {
-      "request_id": "...",
-      "agent_name": "KnowledgeBaseBuilderAgent",
-        "intent": "create_task" | "health_check",
-      "input": {
-        "text": "...",
-        "metadata": {...}
-      },
-      "context": {
-        "user_id": "...",
-        "conversation_id": "...",
-        "timestamp": "..."
-      }
-    }
-    
-    Returns: Supervisor format response
-    """
     try:
         if not request.is_json:
             return jsonify({
@@ -114,10 +90,6 @@ def handle_message():
 
 @app.route('/health', methods=['GET'])
 def health_check():
-    """Health check endpoint. Returns Supervisor format JSON status response.
-    
-    Creates a Supervisor format health check request and processes it through the agent.
-    """
     try:
         # Create Supervisor format health check message
         health_check_message = {
@@ -176,7 +148,6 @@ def health_check():
 
 @app.route('/', methods=['GET'])
 def root():
-    """Root endpoint with API information."""
     return jsonify({
         "service": "KnowledgeBaseBuilderAgent API",
         "version": "0.1.0",
