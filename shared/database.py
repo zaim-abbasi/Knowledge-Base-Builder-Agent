@@ -124,6 +124,14 @@ class TaskDatabase:
             logger.error(f"Error creating task: {str(e)}", exc_info=True)
             return None
     
+    def list_tasks(self) -> list:
+        try:
+            tasks = list(self.collection.find({}, {"_id": 0}))
+            return tasks
+        except Exception as e:
+            logger.error(f"Error listing tasks: {str(e)}")
+            return []
+    
     def close(self):
         if self.client:
             self.client.close()

@@ -146,6 +146,35 @@ def health_check():
         }), 500
 
 
+@app.route('/tasks', methods=['GET'])
+def get_tasks():
+    try:
+        if not agent.db:
+            return jsonify({
+                "status": "error",
+                "error": {
+                    "type": "DATABASE_NOT_INITIALIZED",
+                    "message": "Database not initialized"
+                }
+            }), 500
+        
+        tasks = agent.db.list_tasks()
+        return jsonify({
+            "status": "success",
+            "tasks": tasks,
+            "count": len(tasks)
+        }), 200
+    except Exception as e:
+        logger.error(f"Error getting tasks: {str(e)}", exc_info=True)
+        return jsonify({
+            "status": "error",
+            "error": {
+                "type": "INTERNAL_ERROR",
+                "message": f"Error retrieving tasks: {str(e)}"
+            }
+        }), 500
+
+
 @app.route('/', methods=['GET'])
 def root():
     return jsonify({
@@ -156,6 +185,7 @@ def root():
         "endpoints": {
             "POST /message": "Handle incoming Supervisor format JSON messages",
             "GET /health": "Health check endpoint (returns Supervisor format)",
+            "GET /tasks": "Get all tasks from database",
             "GET /": "API information"
         },
         "supervisor_format": {
